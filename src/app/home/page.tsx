@@ -19,18 +19,16 @@ export default function HomePage() {
       </p>
 
       <Link
-        href="/category/food/chat"
+        href="/chat"
         className="mt-6 block rounded-2xl bg-sky-600 px-5 py-4 text-white shadow hover:bg-sky-700"
       >
         <div className="text-base font-semibold">Ask anything</div>
         <div className="text-sm text-white/80">
-          Get personalized AI recommendations
+          Open the live AI chat and send your decision to the backend
         </div>
       </Link>
 
-      <div className="mt-7 text-xs font-semibold tracking-widest text-slate-500">
-        CATEGORIES
-      </div>
+      <div className="mt-7 text-xs font-semibold tracking-widest text-slate-500">CATEGORIES</div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 pb-24">
         {CATEGORIES.map((cat) => (

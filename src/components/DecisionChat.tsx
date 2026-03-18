@@ -1,0 +1,249 @@
+"use client";
+
+import AppShell from "@/components/AppShell";
+import { CATEGORIES } from "@/lib/categories";
+import { type ExploreSuggestion, sendChat } from "@/lib/api";
+import { saveRecentExplores } from "@/lib/recent-explores";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+type UiMessage = {
+  role: "assistant" | "user";
+  text: string;
+};
+
+function normalizeUrl(url: string | null) {
+  if (!url) {
+    return null;
+  }
+  return url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `https://${url}`;
+}
+
+export default function DecisionChat({ slug }: { slug?: string }) {
+  const category = CATEGORIES.find((item) => item.slug === slug);
+  const backHref = slug ? `/category/${slug}/guided` : "/home";
+  const heading = category ? `${category.title} Chat` : "TrueNorth";
+  const subtitle = category
+    ? `AI assistant for ${category.title.toLowerCase()} decisions`
+    : "AI decision assistant";
+
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [explores, setExplores] = useState<ExploreSuggestion[]>([]);
+  const [messages, setMessages] = useState<UiMessage[]>([
+    {
+      role: "assistant",
+      text: category
+        ? `Hi! I can help you decide in ${category.title}. Tell me what you are choosing between, and I will narrow it down with you.`
+        : "Hi! I’m TrueNorth. Tell me what you’re deciding, and I’ll help you narrow it down.",
+    },
+  ]);
+
+  const quickSuggestions = useMemo(() => {
+    if (slug === "food") {
+      return [
+        "Help me pick dinner tonight",
+        "Cheap lunch nearby",
+        "Best date night food option",
+        "Something quick and easy",
+      ];
+    }
+
+    return [
+      "Help me decide what to do tonight",
+      "Pick between two options",
+      "Give me a few strong recommendations",
+      "Help me narrow this down",
+    ];
+  }, [slug]);
+
+  async function submitMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || loading) {
+      return;
+    }
+
+    const nextMessages: UiMessage[] = [...messages, { role: "user", text: trimmed }];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await sendChat([
+        ...(category
+          ? [
+              {
+                role: "user" as const,
+                content: `Context: We are making a decision in the ${category.title} category.`,
+              },
+            ]
+          : []),
+        ...nextMessages.map((message) => ({
+          role: message.role,
+          content: message.text,
+        })),
+      ]);
+
+      const reply =
+        response.message?.trim() ||
+        "I did not get a useful reply back from the backend.";
+
+      setMessages([...nextMessages, { role: "assistant", text: reply }]);
+      setExplores(response.explores ?? []);
+
+      if ((response.explores ?? []).length > 0) {
+        saveRecentExplores(response.explores, {
+          source: "chat",
+          categorySlug: slug,
+        });
+      }
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Something went wrong while contacting the backend.";
+
+      setError(message);
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          text: "I couldn’t reach the backend just now. Check that the backend server is running and try again.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AppShell>
+      <Link href={backHref} className="text-sm text-slate-500 hover:underline">
+        ← Back
+      </Link>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-lg font-semibold">{heading}</div>
+        <div className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</div>
+
+        <div className="mt-5 space-y-3">
+          {messages.map((message, index) => (
+            <div
+              key={`${message.role}-${index}`}
+              className={[
+                "max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap",
+                message.role === "assistant"
+                  ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                  : "ml-auto bg-sky-600 text-white",
+              ].join(" ")}
+            >
+              {message.text}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6">
+          <div className="text-xs font-semibold tracking-wide text-slate-500">
+            Quick suggestions
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {quickSuggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => void submitMessage(suggestion)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            {error}
+          </div>
+        ) : null}
+
+        {explores.length > 0 ? (
+          <div className="mt-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold tracking-wide text-slate-500">
+                Suggested options
+              </div>
+              <Link href="/explore" className="text-sm font-medium text-sky-600 hover:underline">
+                View all
+              </Link>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {explores.slice(0, 3).map((explore) => {
+                const websiteUrl = normalizeUrl(explore.url);
+                return (
+                  <div
+                    key={explore.name}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                  >
+                    <div className="text-base font-semibold">{explore.name}</div>
+                    {explore.description ? (
+                      <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                        {explore.description}
+                      </div>
+                    ) : null}
+                    {explore.location ? (
+                      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        {explore.location}
+                      </div>
+                    ) : null}
+                    {websiteUrl ? (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                      >
+                        Open website
+                      </a>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+            <input
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void submitMessage(input);
+                }
+              }}
+              placeholder="Type your message..."
+              className="w-full bg-transparent text-sm outline-none"
+            />
+          </div>
+          <button
+            onClick={() => void submitMessage(input)}
+            disabled={loading || !input.trim()}
+            className={[
+              "h-12 min-w-12 rounded-full px-4 text-sm font-semibold shadow-sm",
+              loading || !input.trim()
+                ? "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                : "bg-sky-600 text-white hover:bg-sky-700",
+            ].join(" ")}
+          >
+            {loading ? "..." : "Send"}
+          </button>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

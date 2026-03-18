@@ -1,516 +1,502 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
-
+import {
+  type ExploreSuggestion,
+  type GuidedQuestion,
+  createChat,
+  ensureCategory,
+  finalizeGuided,
+  nextGuided,
+  skipGuided,
+  startGuided,
+} from "@/lib/api";
+import { saveRecentExplores } from "@/lib/recent-explores";
 import Link from "next/link";
-
-import { useMemo, useState } from "react";
-
 import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-type Option = { label: string; emoji?: string };
+const MAX_GUIDED_QUESTIONS = 4;
 
-type Q = { id: string; question: string; options: Option[] };
+type HistoryItem = {
+  prompt: string;
+  answer: string;
+};
+
+function buildAnswerKey(prompt: string, index: number) {
+  const sanitized = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 40);
+
+  return sanitized || `answer-${index}`;
+}
+
+function normalizeUrl(url: string | null) {
+  if (!url) {
+    return null;
+  }
+  return url.startsWith("http://") || url.startsWith("https://")
+    ? url
+    : `https://${url}`;
+}
 
 export default function GuidedPage() {
-
   const params = useParams();
+  const slug = (params?.slug as string) || "food";
 
-  const slug = (params?.slug as string) || "";
-
-  // --- Questions ---
-
-  const questions: Q[] = useMemo(() => {
-
-    if (slug === "food") {
-
-      return [
-
-        {
-
-          id: "occasion",
-
-          question: "What's the occasion?",
-
-          options: [
-
-            { emoji: "🍕", label: "Casual meal" },
-
-            { emoji: "💞", label: "Date night" },
-
-            { emoji: "👨‍👩‍👧‍👦", label: "Family dinner" },
-
-            { emoji: "💼", label: "Business meeting" },
-
-            { emoji: "🎉", label: "Celebration" },
-
-            { emoji: "🧘", label: "Solo treat" },
-
-          ],
-
-        },
-
-        {
-
-          id: "mood",
-
-          question: "What mood are you in?",
-
-          options: [
-
-            { emoji: "🌍", label: "Adventurous" },
-
-            { emoji: "🤗", label: "Comfort food" },
-
-            { emoji: "🥗", label: "Healthy & light" },
-
-            { emoji: "🍰", label: "Indulgent" },
-
-          ],
-
-        },
-
-        {
-
-          id: "cuisine",
-
-          question: "Any cuisine preference?",
-
-          options: [
-
-            { emoji: "🇮🇹", label: "Italian" },
-
-            { emoji: "🥢", label: "Asian" },
-
-            { emoji: "🌮", label: "Mexican" },
-
-            { emoji: "🍔", label: "American" },
-
-            { emoji: "🫒", label: "Mediterranean" },
-
-            { emoji: "🎲", label: "Surprise me" },
-
-          ],
-
-        },
-
-        {
-
-          id: "budget",
-
-          question: "What's your budget?",
-
-          options: [
-
-            { emoji: "💵", label: "Budget-friendly" },
-
-            { emoji: "💳", label: "Moderate" },
-
-            { emoji: "💎", label: "Ready to splurge" },
-
-            { emoji: "🤷", label: "No preference" },
-
-          ],
-
-        },
-
-      ];
-
-    }
-
-    // fallback (other categories) 
-
-    return [
-
-      {
-
-        id: "pref",
-
-        question: "What are you looking for?",
-
-        options: [{ label: "Option A" }, { label: "Option B" }, { label: "Option C" }],
-
-      },
-
-    ];
-
-  }, [slug]);
-
-  // --- State ---
-
-  const [step, setStep] = useState(0);
-
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [assistantMessage, setAssistantMessage] = useState<string>("");
+  const [currentQuestion, setCurrentQuestion] = useState<GuidedQuestion | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [results, setResults] = useState<ExploreSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
 
-  const done = step >= questions.length;
+    async function initializeGuidedFlow() {
+      setLoading(true);
+      setError(null);
+      setChatId(null);
+      setAssistantMessage("");
+      setCurrentQuestion(null);
+      setAnswers({});
+      setHistory([]);
+      setSelectedOptionId(null);
+      setResults([]);
 
-  const total = questions.length;
+      try {
+        const category = await ensureCategory(slug);
+        const chat = await createChat(category.id);
+        const response = await startGuided(chat.Id);
 
-  const currentQ = !done ? questions[step] : null;
+        if (cancelled) {
+          return;
+        }
 
-  // --- Recommendations 
+        setChatId(chat.Id);
+        setAssistantMessage(response.message);
+        setCurrentQuestion(response.question ?? null);
+      } catch (caughtError) {
+        if (cancelled) {
+          return;
+        }
 
-  const recommendations = useMemo(() => {
-
-    if (slug !== "food") {
-
-      return [
-
-        {
-
-          title: "Sample Pick 1",
-
-          subtitle: "A good option based on your choices",
-
-          rating: "4.7",
-
-          match: "92%",
-
-          tags: ["Top Pick", "Open Now"],
-
-        },
-
-        {
-
-          title: "Sample Pick 2",
-
-          subtitle: "Another strong option",
-
-          rating: "4.6",
-
-          match: "88%",
-
-          tags: ["Trending"],
-
-        },
-
-      ];
-
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to start the guided flow.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
 
-    const occasion = answers.occasion || "Casual meal";
-
-    const mood = answers.mood || "Comfort food";
-
-    const cuisine = answers.cuisine || "Italian";
-
-    const budget = answers.budget || "Moderate";
-
-    //  fake restaurant cards 
-
-    return [
-
-      {
-
-        title: "Trattoria Milano",
-
-        subtitle: `${cuisine} • ${budget}`,
-
-        rating: "4.8",
-
-        match: "95%",
-
-        tags: ["Top Pick", "Open Now", occasion, mood],
-
-      },
-
-      {
-
-        title: "Bella Vista",
-
-        subtitle: `${cuisine} • ${budget}`,
-
-        rating: "4.6",
-
-        match: "88%",
-
-        tags: ["Trending", "Open Now"],
-
-      },
-
-      {
-
-        title: "Osteria del Porto",
-
-        subtitle: `${cuisine} • ${budget}`,
-
-        rating: "4.7",
-
-        match: "76%",
-
-        tags: ["Seafood", occasion],
-
-      },
-
-    ];
-
-  }, [answers, slug]);
-
-  function goNext() {
-
-    if (!currentQ) return;
-
-    // save selection if there is one
-
-    if (selected) {
-
-      setAnswers((prev) => ({ ...prev, [currentQ.id]: selected }));
-
-    }
-
-    setSelected(null);
-
-    setStep((s) => s + 1);
-
-  }
-
-  function skip() {
-
-    setSelected(null);
-
-    setStep((s) => s + 1);
-
-  }
-
-  function reset() {
-
-    setStep(0);
-
-    setAnswers({});
-
-    setSelected(null);
-
-  }
-
-  const progressPct = total > 0 ? Math.round(((step + 1) / total) * 100) : 0;
-
-  return (
-<AppShell>
-
-      {/* Top row */}
-<div className="flex items-center justify-between">
-
-        {/* Back to category list */}
-<Link href="/home" className="text-sm text-slate-500 hover:underline">
-
-          ← Back
-</Link>
-<div className="flex items-center gap-3">
-
-          {!done ? (
-<button
-
-              onClick={skip}
-
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
->
-
-              Skip
-</button>
-
-          ) : null}
-<Link
-
-            href={`/category/${slug}/chat`}
-
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
->
-
-            Chat
-</Link>
-</div>
-</div>
-
-      {!done ? (
-<div className="mt-6">
-
-          {/* Steps*/}
-<div className="flex items-center justify-between text-sm text-slate-500">
-<div>
-
-              {step + 1} of {total}
-</div>
-</div>
-<div className="mt-3 h-2 w-full rounded-full bg-slate-200/60 dark:bg-slate-800">
-<div
-
-              className="h-2 rounded-full bg-sky-500 transition-all"
-
-              style={{ width: `${progressPct}%` }}
-
-            />
-</div>
-<h1 className="mt-6 text-3xl font-bold">{currentQ?.question}</h1>
-
-          {/* Cards  */}
-<div className="mt-8 grid grid-cols-2 gap-4">
-
-            {currentQ?.options.map((opt) => {
-
-              const active = selected === opt.label;
-
-              return (
-<button
-
-                  key={opt.label}
-
-                  onClick={() => setSelected(opt.label)}
-
-                  className={[
-
-                    "relative rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:shadow-md",
-
-                    "dark:bg-slate-900",
-
-                    active
-
-                      ? "border-sky-400 ring-2 ring-sky-400/40 dark:border-sky-500"
-
-                      : "border-slate-200 dark:border-slate-800",
-
-                  ].join(" ")}
->
-<div className="text-2xl">{opt.emoji ?? "✨"}</div>
-<div className="mt-3 text-base font-semibold">{opt.label}</div>
-
-                  {/* check bubble*/}
-
-                  {active ? (
-<div className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-white">
-
-                      ✓
-</div>
-
-                  ) : null}
-</button>
-
-              );
-
-            })}
-</div>
-
-          {/* Continue button */}
-<button
-
-            onClick={goNext}
-
-            disabled={!selected}
-
-            className={[
-
-              "mt-6 w-full rounded-2xl px-5 py-4 font-semibold shadow",
-
-              selected
-
-                ? "bg-sky-600 text-white hover:bg-sky-700"
-
-                : "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-
-            ].join(" ")}
->
-
-            {step === total - 1 ? "See Recommendations" : "Continue"}
-</button>
-</div>
-
-      ) : (
-<div className="mt-6">
-<div className="text-sm font-semibold text-sky-400">TrueNorth AI</div>
-<h1 className="mt-2 text-3xl font-bold">Based on your preferences</h1>
-<div className="mt-3 text-sm text-slate-500">
-
-            Occasion: <span className="text-slate-200">{answers.occasion ?? "—"}</span>{" "}
-<span className="mx-2 text-slate-600">|</span>
-
-            Mood: <span className="text-slate-200">{answers.mood ?? "—"}</span>{" "}
-<span className="mx-2 text-slate-600">|</span>
-
-            Cuisine: <span className="text-slate-200">{answers.cuisine ?? "—"}</span>{" "}
-<span className="mx-2 text-slate-600">|</span>
-
-            Budget: <span className="text-slate-200">{answers.budget ?? "—"}</span>
-</div>
-<div className="mt-6 space-y-4">
-
-            {recommendations.map((r) => (
-<div
-
-                key={r.title}
-
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
->
-<div className="flex items-center justify-between">
-<div>
-<div className="text-lg font-semibold">{r.title}</div>
-<div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-
-                      {r.subtitle}
-</div>
-</div>
-<div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-
-                    ⭐ {r.rating}
-</div>
-</div>
-<div className="mt-4 flex flex-wrap gap-2">
-
-                  {r.tags.map((t) => (
-<span
-
-                      key={t}
-
-                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
->
-
-                      {t}
-</span>
-
-                  ))}
-</div>
-<div className="mt-4 flex items-center gap-3">
-<div className="h-2 flex-1 rounded-full bg-slate-200/60 dark:bg-slate-800">
-<div
-
-                      className="h-2 rounded-full bg-sky-500"
-
-                      style={{ width: r.match }}
-
-                    />
-</div>
-<div className="text-sm font-semibold text-slate-500">{r.match}</div>
-</div>
-</div>
-
-            ))}
-</div>
-<div className="mt-6 grid gap-3">
-<Link
-
-              href={`/category/${slug}/chat`}
-
-              className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
->
-
-              Continue in Chat
-</Link>
-<button
-
-              onClick={reset}
-
-              className="w-full rounded-2xl bg-sky-600 px-5 py-4 font-semibold text-white shadow hover:bg-sky-700"
->
-
-              Start Over
-</button>
-</div>
-</div>
-
-      )}
-</AppShell>
-
+    void initializeGuidedFlow();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, refreshKey]);
+
+  const selectedOption = useMemo(
+    () => currentQuestion?.options.find((option) => option.id === selectedOptionId) ?? null,
+    [currentQuestion, selectedOptionId],
   );
 
+  const answeredCount = history.length;
+  const progressPct = currentQuestion
+    ? Math.min(Math.round(((answeredCount + 1) / MAX_GUIDED_QUESTIONS) * 100), 100)
+    : 100;
+
+  async function finalizeWithAnswers(
+    finalAnswers: Record<string, string>,
+    updatedHistory?: HistoryItem[],
+  ) {
+    if (!chatId) {
+      return;
+    }
+
+    const response = await finalizeGuided(chatId, finalAnswers);
+    setAnswers(finalAnswers);
+    setHistory(updatedHistory ?? history);
+    setAssistantMessage(response.message);
+    setCurrentQuestion(null);
+    setSelectedOptionId(null);
+    setResults(response.explores ?? []);
+
+    if ((response.explores ?? []).length > 0) {
+      saveRecentExplores(response.explores, {
+        source: "guided",
+        categorySlug: slug,
+      });
+    }
+  }
+
+  async function handleContinue() {
+    if (!chatId || !currentQuestion || !selectedOption) {
+      return;
+    }
+
+    const answerKey = buildAnswerKey(currentQuestion.prompt, answeredCount + 1);
+    const nextAnswers = {
+      ...answers,
+      [answerKey]: selectedOption.label,
+    };
+    const nextHistory = [
+      ...history,
+      {
+        prompt: currentQuestion.prompt,
+        answer: selectedOption.label,
+      },
+    ];
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      if (nextHistory.length >= MAX_GUIDED_QUESTIONS) {
+        await finalizeWithAnswers(nextAnswers, nextHistory);
+        return;
+      }
+
+      const response = await nextGuided(chatId, {
+        questionId: currentQuestion.id,
+        optionId: selectedOption.id,
+        answerKey,
+        answerValue: selectedOption.label,
+      });
+
+      setAnswers(nextAnswers);
+      setHistory(nextHistory);
+      setAssistantMessage(response.message);
+      setCurrentQuestion(response.question ?? null);
+      setSelectedOptionId(null);
+
+      if (!response.question) {
+        await finalizeWithAnswers(nextAnswers, nextHistory);
+      }
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to continue the guided flow.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleFinishNow() {
+    if (!chatId) {
+      return;
+    }
+
+    let finalAnswers = answers;
+    let finalHistory = history;
+
+    if (currentQuestion && selectedOption) {
+      const answerKey = buildAnswerKey(currentQuestion.prompt, answeredCount + 1);
+      finalAnswers = {
+        ...answers,
+        [answerKey]: selectedOption.label,
+      };
+      finalHistory = [
+        ...history,
+        {
+          prompt: currentQuestion.prompt,
+          answer: selectedOption.label,
+        },
+      ];
+    }
+
+    if (Object.keys(finalAnswers).length === 0) {
+      setError("Choose at least one answer before generating recommendations.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await finalizeWithAnswers(finalAnswers, finalHistory);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to finalize guided recommendations.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSkip() {
+    if (!chatId || !currentQuestion) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await skipGuided(chatId, {
+        questionId: currentQuestion.id,
+        questionContext: currentQuestion.prompt,
+        reason: "User skipped this question",
+      });
+
+      setAssistantMessage(response.message);
+      setCurrentQuestion(response.question ?? null);
+      setSelectedOptionId(null);
+
+      if (!response.question && Object.keys(answers).length > 0) {
+        await finalizeWithAnswers(answers, history);
+      }
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to skip this question.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <AppShell>
+        <Link href="/home" className="text-sm text-slate-500 hover:underline">
+          ← Back
+        </Link>
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="text-lg font-semibold">Starting guided flow...</div>
+          <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Creating the chat session and loading your first question.
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <div className="flex items-center justify-between">
+        <Link href="/home" className="text-sm text-slate-500 hover:underline">
+          ← Back
+        </Link>
+
+        <div className="flex items-center gap-3">
+          {currentQuestion ? (
+            <button
+              onClick={() => void handleSkip()}
+              disabled={submitting}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+            >
+              Skip
+            </button>
+          ) : null}
+          <Link
+            href={`/category/${slug}/chat`}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+          >
+            Chat
+          </Link>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          {error}
+        </div>
+      ) : null}
+
+      {assistantMessage ? (
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+          {assistantMessage}
+        </div>
+      ) : null}
+
+      {currentQuestion ? (
+        <div className="mt-6">
+          <div className="flex items-center justify-between text-sm text-slate-500">
+            <div>
+              {Math.min(answeredCount + 1, MAX_GUIDED_QUESTIONS)} of {MAX_GUIDED_QUESTIONS}
+            </div>
+            <button
+              onClick={() => setRefreshKey((value) => value + 1)}
+              className="font-medium text-sky-600 hover:underline"
+            >
+              Restart
+            </button>
+          </div>
+
+          <div className="mt-3 h-2 w-full rounded-full bg-slate-200/60 dark:bg-slate-800">
+            <div
+              className="h-2 rounded-full bg-sky-500 transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+
+          <h1 className="mt-6 text-3xl font-bold">{currentQuestion.prompt}</h1>
+
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {currentQuestion.options.map((option) => {
+              const active = selectedOptionId === option.id;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setSelectedOptionId(option.id)}
+                  className={[
+                    "relative rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:shadow-md dark:bg-slate-900",
+                    active
+                      ? "border-sky-400 ring-2 ring-sky-400/40 dark:border-sky-500"
+                      : "border-slate-200 dark:border-slate-800",
+                  ].join(" ")}
+                >
+                  <div className="text-base font-semibold">{option.label}</div>
+                  <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                    Tap to select this option.
+                  </div>
+                  {active ? (
+                    <div className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-white">
+                      ✓
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            <button
+              onClick={() => void handleContinue()}
+              disabled={!selectedOption || submitting}
+              className={[
+                "w-full rounded-2xl px-5 py-4 font-semibold shadow",
+                selectedOption && !submitting
+                  ? "bg-sky-600 text-white hover:bg-sky-700"
+                  : "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+              ].join(" ")}
+            >
+              {submitting
+                ? "Working..."
+                : answeredCount + 1 >= MAX_GUIDED_QUESTIONS
+                  ? "See Recommendations"
+                  : "Continue"}
+            </button>
+
+            {Object.keys(answers).length > 0 || selectedOption ? (
+              <button
+                onClick={() => void handleFinishNow()}
+                disabled={submitting}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 font-semibold text-slate-700 shadow-sm hover:shadow-md disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                Finish Now
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {results.length > 0 ? (
+        <div className="mt-6">
+          <div className="text-sm font-semibold text-sky-500">TrueNorth Recommendations</div>
+          <h1 className="mt-2 text-3xl font-bold">Based on your answers</h1>
+
+          {history.length > 0 ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Your selections
+              </div>
+              <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                {history.map((item) => (
+                  <div key={`${item.prompt}-${item.answer}`}>
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      {item.prompt}
+                    </span>{" "}
+                    — {item.answer}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-6 space-y-4">
+            {results.map((result) => {
+              const websiteUrl = normalizeUrl(result.url);
+              return (
+                <div
+                  key={result.name}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold">{result.name}</div>
+                      {result.location ? (
+                        <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          {result.location}
+                        </div>
+                      ) : null}
+                    </div>
+                    <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                      Suggested
+                    </span>
+                  </div>
+
+                  {result.description ? (
+                    <div className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                      {result.description}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {websiteUrl ? (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                      >
+                        Open website
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            <Link
+              href="/explore"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+            >
+              Open Explore Screen
+            </Link>
+            <Link
+              href={`/category/${slug}/chat`}
+              className="w-full rounded-2xl bg-sky-600 px-5 py-4 text-center font-semibold text-white shadow hover:bg-sky-700"
+            >
+              Continue in Chat
+            </Link>
+            <button
+              onClick={() => setRefreshKey((value) => value + 1)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+            >
+              Start Over
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </AppShell>
+  );
 }
- 
