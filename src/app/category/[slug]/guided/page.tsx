@@ -37,9 +37,25 @@ function normalizeUrl(url: string | null) {
   if (!url) {
     return null;
   }
+
   return url.startsWith("http://") || url.startsWith("https://")
     ? url
     : `https://${url}`;
+}
+
+function getGuidedDisplayMessage(response: {
+  question?: GuidedQuestion;
+  explores?: ExploreSuggestion[];
+}) {
+  if (response.question) {
+    return "";
+  }
+
+  if ((response.explores ?? []).length > 0) {
+    return "Here are some recommendations based on your answers.";
+  }
+
+  return "";
 }
 
 export default function GuidedPage() {
@@ -82,7 +98,7 @@ export default function GuidedPage() {
         }
 
         setChatId(chat.Id);
-        setAssistantMessage(response.message);
+        setAssistantMessage(getGuidedDisplayMessage(response));
         setCurrentQuestion(response.question ?? null);
       } catch (caughtError) {
         if (cancelled) {
@@ -127,9 +143,10 @@ export default function GuidedPage() {
     }
 
     const response = await finalizeGuided(chatId, finalAnswers);
+
     setAnswers(finalAnswers);
     setHistory(updatedHistory ?? history);
-    setAssistantMessage(response.message);
+    setAssistantMessage(getGuidedDisplayMessage(response));
     setCurrentQuestion(null);
     setSelectedOptionId(null);
     setResults(response.explores ?? []);
@@ -178,7 +195,7 @@ export default function GuidedPage() {
 
       setAnswers(nextAnswers);
       setHistory(nextHistory);
-      setAssistantMessage(response.message);
+      setAssistantMessage(getGuidedDisplayMessage(response));
       setCurrentQuestion(response.question ?? null);
       setSelectedOptionId(null);
 
@@ -255,7 +272,7 @@ export default function GuidedPage() {
         reason: "User skipped this question",
       });
 
-      setAssistantMessage(response.message);
+      setAssistantMessage(getGuidedDisplayMessage(response));
       setCurrentQuestion(response.question ?? null);
       setSelectedOptionId(null);
 
@@ -351,6 +368,7 @@ export default function GuidedPage() {
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {currentQuestion.options.map((option) => {
               const active = selectedOptionId === option.id;
+
               return (
                 <button
                   key={option.id}
@@ -433,6 +451,7 @@ export default function GuidedPage() {
           <div className="mt-6 space-y-4">
             {results.map((result) => {
               const websiteUrl = normalizeUrl(result.url);
+
               return (
                 <div
                   key={result.name}
