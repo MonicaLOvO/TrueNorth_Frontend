@@ -6,11 +6,11 @@ import { cn } from "@/lib/cn";
 import { Home, Compass, Mic, MessageCircle, User } from "lucide-react";
 
 const items = [
- { href: "/home", label: "Home", icon: Home },
- { href: "/explore", label: "Explore", icon: Compass },
- { href: "/category/food/voice", label: "", icon: Mic }, // center mic
- { href: "/chat", label: "Chat", icon: MessageCircle },
- { href: "/profile", label: "Profile", icon: User },
+  { href: "/home", label: "Home", icon: Home },
+  { href: "/explore", label: "Explore", icon: Compass },
+  { href: "/category/food/voice", label: "", icon: Mic },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
+  { href: "/profile", label: "Profile", icon: User },
 ];
 
 export default function BottomNav() {
