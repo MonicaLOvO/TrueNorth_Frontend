@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import { readRecentExplores, type StoredExplore } from "@/lib/recent-explores";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import BackButton from "@/components/BackButton";
 
 const FILTERS = ["All", "With Link", "With Location"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -66,13 +67,8 @@ export default function ExplorePage() {
   return (
     <AppShell>
       <div className="flex items-center justify-between">
-        <Link
-          href="/home"
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800"
-          aria-label="Back"
-        >
-          ←
-        </Link>
+        <BackButton href="/home" />
+      
         <div className="text-lg font-semibold">Explore</div>
         <button
           className="flex min-h-10 min-w-10 items-center justify-center rounded-full bg-slate-200 px-4 text-sm font-medium dark:bg-slate-800"
