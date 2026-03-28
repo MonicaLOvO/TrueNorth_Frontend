@@ -1,36 +1,48 @@
 import AppShell from "@/components/AppShell";
 import BottomNav from "@/components/BottomNav";
 import CategoryCard from "@/components/CategoryCard";
+import TrueNorthLogo from "@/components/TrueNorthLogo";
 import { CATEGORIES } from "@/lib/categories";
 import Link from "next/link";
 
 export default function HomePage() {
   return (
     <AppShell>
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-white">
-          🧭
-        </div>
-        <div className="text-xl font-semibold">TrueNorth</div>
+      <div className="flex items-center justify-between">
+        <TrueNorthLogo />
+        <Link
+          href="/profile"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm transition hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+          aria-label="Profile"
+        >
+          👤
+        </Link>
       </div>
 
-      <p className="mt-2 text-slate-600 dark:text-slate-400">
+      <p className="mt-3 text-slate-500 dark:text-slate-400">
         What would you like help deciding today?
       </p>
 
       <Link
         href="/chat"
-        className="mt-6 block rounded-2xl bg-sky-600 px-5 py-4 text-white shadow hover:bg-sky-700"
+        className="mt-6 flex items-center gap-4 rounded-2xl bg-sky-600 px-5 py-4 text-white shadow-md transition hover:bg-sky-700 active:scale-[0.98]"
       >
-        <div className="text-base font-semibold">Ask anything</div>
-        <div className="text-sm text-white/80">
-          Open the live AI chat and send your decision to the backend
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 text-xl">
+          💬
+        </div>
+        <div>
+          <div className="text-base font-semibold">Ask anything</div>
+          <div className="text-sm text-white/75">
+            Open the live AI chat and send your decision to the backend
+          </div>
         </div>
       </Link>
 
-      <div className="mt-7 text-xs font-semibold tracking-widest text-slate-500">CATEGORIES</div>
+      <div className="mt-8 text-xs font-semibold uppercase tracking-widest text-slate-400">
+        Categories
+      </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 pb-24">
+      <div className="mt-3 grid grid-cols-2 gap-3 pb-28">
         {CATEGORIES.map((cat) => (
           <CategoryCard key={cat.slug} cat={cat} />
         ))}
