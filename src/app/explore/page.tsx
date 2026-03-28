@@ -1,10 +1,10 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
+import BackButton from "@/components/BackButton";
 import { readRecentExplores, type StoredExplore } from "@/lib/recent-explores";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import BackButton from "@/components/BackButton";
 
 const FILTERS = ["All", "With Link", "With Location"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -68,10 +68,9 @@ export default function ExplorePage() {
     <AppShell>
       <div className="flex items-center justify-between">
         <BackButton href="/home" />
-      
-        <div className="text-lg font-semibold">Explore</div>
+        <div className="text-lg font-semibold text-slate-900 dark:text-white">Explore</div>
         <button
-          className="flex min-h-10 min-w-10 items-center justify-center rounded-full bg-slate-200 px-4 text-sm font-medium dark:bg-slate-800"
+          className="flex min-h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           aria-label="Refine"
           onClick={() => setShowFilters((value) => !value)}
         >
