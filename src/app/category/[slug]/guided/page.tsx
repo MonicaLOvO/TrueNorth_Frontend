@@ -1,6 +1,7 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
+import BackButton from "@/components/BackButton";
 import {
   type ExploreSuggestion,
   type GuidedQuestion,
@@ -291,9 +292,7 @@ export default function GuidedPage() {
   if (loading) {
     return (
       <AppShell>
-        <Link href="/home" className="text-sm text-slate-500 hover:underline">
-          ← Back
-        </Link>
+        <BackButton href="/home" />
         <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="text-lg font-semibold">Starting guided flow...</div>
           <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -307,9 +306,7 @@ export default function GuidedPage() {
   return (
     <AppShell>
       <div className="flex items-center justify-between">
-        <Link href="/home" className="text-sm text-slate-500 hover:underline">
-          ← Back
-        </Link>
+        <BackButton href="/home" />
 
         <div className="flex items-center gap-3">
           {currentQuestion ? (
