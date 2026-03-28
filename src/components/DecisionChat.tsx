@@ -39,7 +39,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
       role: "assistant",
       text: category
         ? `Hi! I can help you decide in ${category.title}. Tell me what you are choosing between, and I will narrow it down with you.`
-        : "Hi! I'm TrueNorth. Tell me what you're deciding, and I'll help you narrow it down.",
+        : "Hi! I am TrueNorth. Tell me what you are deciding, and I will help you narrow it down.",
     },
   ]);
 
@@ -111,7 +111,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
         ...nextMessages,
         {
           role: "assistant",
-          text: "I couldn't reach the backend just now. Check that the backend server is running and try again.",
+          text: "I could not reach the backend just now. Check that the backend server is running and try again.",
         },
       ]);
     } finally {
@@ -148,7 +148,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
         ))}
         {loading && (
           <div className="max-w-[88%] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-400 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            Thinking…
+            Thinking...
           </div>
         )}
       </div>
@@ -209,7 +209,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
                     </div>
                   ) : null}
                   {websiteUrl ? (
-                    
+                    <a
                       href={websiteUrl}
                       target="_blank"
                       rel="noreferrer"
@@ -233,7 +233,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
             onKeyDown={(event) => {
               if (event.key === "Enter") void submitMessage(input);
             }}
-            placeholder="Type your message…"
+            placeholder="Type your message..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
           />
         </div>
@@ -248,7 +248,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
           ].join(" ")}
           aria-label="Send"
         >
-          {loading ? "…" : "↑"}
+          {loading ? "..." : "^"}
         </button>
       </div>
     </AppShell>
