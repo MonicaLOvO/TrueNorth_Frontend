@@ -5,6 +5,7 @@ import { API_BASE_URL } from "@/lib/api";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import BackButton from "@/components/BackButton";
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -20,9 +21,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <Link href="/home" className="text-sm text-slate-500 hover:underline">
-        ← Back
-      </Link>
+      <BackButton href="/home" />
 
       <h1 className="mt-4 text-2xl font-bold">Settings</h1>
 
