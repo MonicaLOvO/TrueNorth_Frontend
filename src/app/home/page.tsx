@@ -29,7 +29,7 @@ export default function HomePage() {
         <div>
           <div className="text-base font-semibold">Ask anything</div>
           <div className="text-sm text-white/75">
-            Open the live AI chat and send your decision to the backend
+            Open the live AI chat and get personalized suggestions
           </div>
         </div>
       </Link>

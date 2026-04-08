@@ -10,6 +10,12 @@ export type ApiCategory = {
   description: string | null;
 };
 
+export type CreateCategoryPayload = {
+  name: string;
+  iconUrl?: string | null;
+  description?: string | null;
+};
+
 export type ApiChat = {
   Id: string;
   UserId?: string | null;
@@ -179,6 +185,18 @@ function fallbackCategoryName(slug: string) {
     .join(" ");
 }
 
+export async function createCategory(
+  payload: CreateCategoryPayload,
+): Promise<ApiCategory> {
+  const created = await apiRequest<ApiCategory>("/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  categoriesPromise = null;
+  return created;
+}
+
 export async function getCategories(forceRefresh = false): Promise<ApiCategory[]> {
   if (!categoriesPromise || forceRefresh) {
     categoriesPromise = apiRequest<ApiCategory[]>("/categories");
@@ -195,23 +213,45 @@ export async function getCategories(forceRefresh = false): Promise<ApiCategory[]
 export async function ensureCategory(slug: string): Promise<ApiCategory> {
   const definition = getCategoryDefinition(slug);
   const desiredName = definition?.title ?? fallbackCategoryName(slug);
+  const normalizedDesiredName = normalizeCategoryName(desiredName);
+  const normalizedSlug = normalizeCategoryName(slug);
+
   const categories = await getCategories();
 
   const existing = categories.find((category) => {
     const normalized = normalizeCategoryName(category.name);
-    return (
-      normalized === normalizeCategoryName(desiredName) ||
-      normalized === normalizeCategoryName(slug)
-    );
+    return normalized === normalizedDesiredName || normalized === normalizedSlug;
   });
 
   if (existing) {
     return existing;
   }
 
-  throw new Error(
-    `The ${desiredName} category is not available in the backend yet. Ask your backend teammate to seed or create that category first.`,
-  );
+  try {
+    const created = await createCategory({
+      name: desiredName,
+      description: definition?.subtitle ?? null,
+      iconUrl: null,
+    });
+
+    return created;
+  } catch (creationError) {
+    const refreshedCategories = await getCategories(true);
+    const retryMatch = refreshedCategories.find((category) => {
+      const normalized = normalizeCategoryName(category.name);
+      return normalized === normalizedDesiredName || normalized === normalizedSlug;
+    });
+
+    if (retryMatch) {
+      return retryMatch;
+    }
+
+    if (creationError instanceof Error) {
+      throw new Error(`Unable to prepare the ${desiredName} category. ${creationError.message}`);
+    }
+
+    throw new Error(`Unable to prepare the ${desiredName} category.`);
+  }
 }
 
 export async function createChat(categoryId: string): Promise<ApiChat> {

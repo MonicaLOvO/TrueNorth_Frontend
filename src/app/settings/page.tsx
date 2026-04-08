@@ -37,7 +37,7 @@ export default function SettingsPage() {
               onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
               className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-700"
             >
-              {activeTheme === "dark" ? "Dark" : "Light"}
+              Switch to {activeTheme === "dark" ? "Light" : "Dark"}
             </button>
           </div>
         </div>
