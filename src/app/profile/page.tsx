@@ -1,10 +1,13 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
+import BackButton from "@/components/BackButton";
+import { getCurrentUser, updateCurrentUser, type CurrentUser } from "@/lib/api";
+import { readRecentExplores } from "@/lib/recent-explores";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type RowProps = {
   icon: string;
@@ -46,106 +49,229 @@ function Row({ icon, label, value, href, onClick, right }: RowProps) {
   );
 }
 
+function getInitials(user: Pick<CurrentUser, "DisplayName" | "UserName">) {
+  const source = user.DisplayName?.trim() || user.UserName?.trim() || "TN";
+  return (
+    source
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "TN"
+  );
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
-
-  const user = useMemo(
-    () => ({
-      initials: "TN",
-      name: "TrueNorth User",
-      email: "demo@truenorth.app",
-      decisionsMade: 12,
-      placesVisited: 5,
-      savedPlaces: 3,
-      decisionHistory: 8,
-    }),
-    [],
+  const [mounted, setMounted] = useState(false);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [recentExplores, setRecentExplores] = useState(
+    () => [] as ReturnType<typeof readRecentExplores>,
   );
+  const [user, setUser] = useState<CurrentUser>({
+    Id: "demo-user",
+    UserName: "TrueNorth User",
+    Email: "demo@truenorth.app",
+    DisplayName: "TrueNorth User",
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCurrentUser() {
+      setLoadingUser(true);
+      setProfileError(null);
+
+      try {
+        const profile = await getCurrentUser();
+        if (active) {
+          setUser(profile);
+        }
+      } catch {
+        if (active) {
+          setProfileError("Using demo profile data because no signed-in user was found.");
+        }
+      } finally {
+        if (active) {
+          setLoadingUser(false);
+        }
+      }
+    }
+
+    void loadCurrentUser();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setRecentExplores(readRecentExplores());
+  }, []);
 
   const darkMode = resolvedTheme === "dark";
 
+  const stats = useMemo(
+    () => ({
+      decisionsMade: Math.max(recentExplores.length, 1),
+      exploreSessions: recentExplores.length,
+      savedPlaces: recentExplores.filter((item) => Boolean(item.url)).length,
+      decisionHistory: recentExplores.length,
+    }),
+    [recentExplores],
+  );
+
+  async function handleThemeToggle() {
+    if (!mounted || savingTheme) {
+      return;
+    }
+
+    setSavingTheme(true);
+    setTheme(darkMode ? "light" : "dark");
+    setTimeout(() => setSavingTheme(false), 150);
+  }
+
+  async function handleUseDemoProfile() {
+    setProfileError(null);
+    setLoadingUser(false);
+    setUser({
+      Id: "demo-user",
+      UserName: "TrueNorth User",
+      Email: "demo@truenorth.app",
+      DisplayName: "TrueNorth User",
+    });
+  }
+
+  async function handleQuickDisplayNameUpdate() {
+    const nextName = window.prompt(
+      "Update display name",
+      user.DisplayName?.trim() || user.UserName?.trim() || "",
+    );
+
+    if (nextName === null) {
+      return;
+    }
+
+    const trimmed = nextName.trim();
+    if (!trimmed) {
+      setProfileError("Display name cannot be empty.");
+      return;
+    }
+
+    try {
+      const updated = await updateCurrentUser({ displayName: trimmed });
+      setUser(updated);
+      setProfileError(null);
+    } catch {
+      setUser((current) => ({ ...current, DisplayName: trimmed }));
+      setProfileError("Saved locally only. Backend profile update is not available for this session.");
+    }
+  }
+
   return (
     <AppShell>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
+        <BackButton useHistory fallbackHref="/home" />
         <h1 className="text-3xl font-bold">Profile</h1>
-        <Link
-          href="/settings"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xl dark:bg-slate-800"
-          aria-label="Settings"
-        >
-          ⚙️
-        </Link>
+        <div className="w-[72px]" />
       </div>
+
+      {profileError ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {profileError}
+        </div>
+      ) : null}
 
       <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 font-bold text-white">
-              {user.initials}
+              {getInitials(user)}
             </div>
             <div>
-              <div className="text-lg font-semibold">{user.name}</div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">{user.email}</div>
+              <div className="text-lg font-semibold">
+                {loadingUser ? "Loading profile..." : user.DisplayName || user.UserName}
+              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {user.Email || `${user.UserName}@truenorth.app`}
+              </div>
             </div>
           </div>
-          <Link
-            href="/settings"
+          <button
+            type="button"
+            onClick={() => void handleQuickDisplayNameUpdate()}
             className="rounded-full bg-sky-100 px-4 py-2 text-sm font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300"
           >
             Edit
-          </Link>
+          </button>
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-3xl font-extrabold text-sky-500">{user.decisionsMade}</div>
+          <div className="text-3xl font-extrabold text-sky-500">{stats.decisionsMade}</div>
           <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Decisions Made</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-3xl font-extrabold text-sky-500">{user.placesVisited}</div>
+          <div className="text-3xl font-extrabold text-sky-500">{stats.exploreSessions}</div>
           <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Explore Sessions</div>
         </div>
       </div>
 
       <div className="mt-8">
-        <div className="mb-3 text-sm font-semibold tracking-wide text-slate-400">PREFERENCES</div>
+        <div className="mb-3 text-sm font-semibold tracking-wide text-slate-400">
+          PREFERENCES
+        </div>
         <div className="space-y-3">
-          <Row icon="♡" label="Saved Places" value={user.savedPlaces} href="/explore" />
-          <Row icon="🕒" label="Decision History" value={user.decisionHistory} href="/chat" />
+          <Row icon="♡" label="Saved Places" value={stats.savedPlaces} href="/explore" />
+          <Row icon="🕒" label="Decision History" value={stats.decisionHistory} href="/chat" />
+          <Row icon="⚙️" label="Settings" href="/settings" />
           <Row icon="🔔" label="Notifications" href="/settings" />
           <Row icon="🌐" label="Location Settings" href="/settings" />
           <Row
             icon="🌙"
             label="Dark Mode"
-            onClick={() => setTheme(darkMode ? "light" : "dark")}
+            onClick={() => void handleThemeToggle()}
             right={
-              <label className="relative inline-flex cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={darkMode}
-                  onChange={() => setTheme(darkMode ? "light" : "dark")}
-                />
-                <div className="h-6 w-11 rounded-full bg-slate-300 dark:bg-slate-700" />
+              <div
+                className={[
+                  "relative h-6 w-11 rounded-full transition",
+                  darkMode ? "bg-sky-600" : "bg-slate-300 dark:bg-slate-700",
+                ].join(" ")}
+              >
                 <div
-                  className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition ${
-                    darkMode ? "translate-x-5" : ""
-                  }`}
+                  className={[
+                    "absolute top-1 h-4 w-4 rounded-full bg-white transition",
+                    darkMode ? "left-6" : "left-1",
+                  ].join(" ")}
                 />
-              </label>
+              </div>
             }
           />
           <Row icon="❓" label="Help & Support" href="/settings" />
         </div>
 
-        <button
-          className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300 bg-red-50 px-4 py-4 font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
-          onClick={() => router.push("/")}
-        >
-          ⎋ Return to Welcome Screen
-        </button>
+        <div className="mt-6 grid gap-3">
+          <button
+            type="button"
+            onClick={() => void handleUseDemoProfile()}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+          >
+            Use Demo Profile
+          </button>
+          <button
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300 bg-red-50 px-4 py-4 font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+            onClick={() => router.push("/")}
+          >
+            ⎋ Return to Welcome Screen
+          </button>
+        </div>
       </div>
     </AppShell>
   );

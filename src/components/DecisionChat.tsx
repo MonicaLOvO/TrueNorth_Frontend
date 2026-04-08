@@ -20,9 +20,21 @@ function normalizeUrl(url: string | null) {
     : `https://${url}`;
 }
 
+function cleanText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/^[\s>*•-]+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default function DecisionChat({ slug }: { slug?: string }) {
   const category = CATEGORIES.find((item) => item.slug === slug);
-  const backHref = slug ? `/category/${slug}` : "/home";
+  const backHref = slug ? `/category/${slug}/guided` : "/home";
   const heading = category
     ? `${category.emoji} ${category.title} Chat`
     : "TrueNorth Chat";
@@ -64,10 +76,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
-    const nextMessages: UiMessage[] = [
-      ...messages,
-      { role: "user", text: trimmed },
-    ];
+    const nextMessages: UiMessage[] = [...messages, { role: "user", text: trimmed }];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
@@ -90,7 +99,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
       ]);
 
       const reply =
-        response.message?.trim() ||
+        cleanText(response.message)?.trim() ||
         "I did not get a useful reply back from the backend.";
       setMessages([...nextMessages, { role: "assistant", text: reply }]);
       setExplores(response.explores ?? []);
@@ -124,12 +133,8 @@ export default function DecisionChat({ slug }: { slug?: string }) {
       <BackButton href={backHref} />
 
       <div className="mb-4 mt-5">
-        <div className="text-xl font-bold text-slate-900 dark:text-white">
-          {heading}
-        </div>
-        <div className="text-sm text-slate-500 dark:text-slate-400">
-          {subtitle}
-        </div>
+        <div className="text-xl font-bold text-slate-900 dark:text-white">{heading}</div>
+        <div className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</div>
       </div>
 
       <div className="space-y-3">
@@ -182,10 +187,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
             <div className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               Suggested options
             </div>
-            <Link
-              href="/explore"
-              className="text-sm font-medium text-sky-600 hover:underline"
-            >
+            <Link href="/explore" className="text-sm font-medium text-sky-600 hover:underline">
               View all
             </Link>
           </div>
@@ -194,30 +196,40 @@ export default function DecisionChat({ slug }: { slug?: string }) {
               const websiteUrl = normalizeUrl(explore.url);
               return (
                 <div
-                  key={explore.name}
+                  key={`${explore.name}-${explore.url ?? explore.location ?? "card"}`}
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
                 >
-                  <div className="text-base font-semibold">{explore.name}</div>
-                  {explore.description ? (
+                  <div className="text-base font-semibold">
+                    {cleanText(explore.name) ?? explore.name}
+                  </div>
+                  {cleanText(explore.description) ? (
                     <div className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                      {explore.description}
+                      {cleanText(explore.description)}
                     </div>
                   ) : null}
-                  {explore.location ? (
+                  {cleanText(explore.location) ? (
                     <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {explore.location}
+                      {cleanText(explore.location)}
                     </div>
                   ) : null}
-                  {websiteUrl ? (
-                    <a
-                      href={websiteUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {websiteUrl ? (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                      >
+                        Open website
+                      </a>
+                    ) : null}
+                    <Link
+                      href="/explore"
+                      className="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
                     >
-                      Open website
-                    </a>
-                  ) : null}
+                      View details
+                    </Link>
+                  </div>
                 </div>
               );
             })}
@@ -248,7 +260,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
           ].join(" ")}
           aria-label="Send"
         >
-          {loading ? "..." : "^"}
+          {loading ? "..." : "↑"}
         </button>
       </div>
     </AppShell>

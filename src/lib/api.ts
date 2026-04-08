@@ -56,7 +56,74 @@ export type ChatResponse = {
   explores: ExploreSuggestion[];
 };
 
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export type CurrentUser = {
+  Id: string;
+  UserName: string;
+  Email?: string | null;
+  DisplayName?: string | null;
+};
+
+export type UpdateCurrentUserPayload = {
+  userName?: string;
+  email?: string | null;
+  displayName?: string | null;
+};
+
+let categoriesPromise: Promise<ApiCategory[]> | null = null;
+
+function getStoredAccessToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const directKeys = [
+    "truenorth:access_token",
+    "access_token",
+    "token",
+    "authToken",
+    "jwt",
+  ];
+
+  for (const key of directKeys) {
+    const value =
+      window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    if (value?.trim()) {
+      return value.trim();
+    }
+  }
+
+  const jsonKeys = ["truenorth:auth", "auth", "user", "session"];
+  for (const key of jsonKeys) {
+    const raw =
+      window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        access_token?: string;
+        accessToken?: string;
+        token?: string;
+      };
+
+      const token = parsed.access_token ?? parsed.accessToken ?? parsed.token;
+      if (token?.trim()) {
+        return token.trim();
+      }
+    } catch {
+      // ignore invalid JSON blobs
+    }
+  }
+
+  return null;
+}
+
+async function apiRequest<T>(
+  path: string,
+  init?: RequestInit,
+  options?: { auth?: boolean },
+): Promise<T> {
   let response: Response;
 
   try {
@@ -64,6 +131,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(options?.auth && getStoredAccessToken()
+          ? { Authorization: `Bearer ${getStoredAccessToken()}` }
+          : {}),
         ...(init?.headers ?? {}),
       },
       cache: "no-store",
@@ -109,11 +179,24 @@ function fallbackCategoryName(slug: string) {
     .join(" ");
 }
 
+export async function getCategories(forceRefresh = false): Promise<ApiCategory[]> {
+  if (!categoriesPromise || forceRefresh) {
+    categoriesPromise = apiRequest<ApiCategory[]>("/categories");
+  }
+
+  try {
+    return await categoriesPromise;
+  } catch (error) {
+    categoriesPromise = null;
+    throw error;
+  }
+}
+
 export async function ensureCategory(slug: string): Promise<ApiCategory> {
   const definition = getCategoryDefinition(slug);
   const desiredName = definition?.title ?? fallbackCategoryName(slug);
+  const categories = await getCategories();
 
-  const categories = await apiRequest<ApiCategory[]>("/categories");
   const existing = categories.find((category) => {
     const normalized = normalizeCategoryName(category.name);
     return (
@@ -126,14 +209,9 @@ export async function ensureCategory(slug: string): Promise<ApiCategory> {
     return existing;
   }
 
-  return apiRequest<ApiCategory>("/categories", {
-    method: "POST",
-    body: JSON.stringify({
-      name: desiredName,
-      description: definition?.subtitle ?? `Decisions about ${desiredName}`,
-      iconUrl: null,
-    }),
-  });
+  throw new Error(
+    `The ${desiredName} category is not available in the backend yet. Ask your backend teammate to seed or create that category first.`,
+  );
 }
 
 export async function createChat(categoryId: string): Promise<ApiChat> {
@@ -192,11 +270,26 @@ export async function finalizeGuided(
   });
 }
 
-export async function sendChat(
-  messages: ChatRequestMessage[],
-): Promise<ChatResponse> {
+export async function sendChat(messages: ChatRequestMessage[]): Promise<ChatResponse> {
   return apiRequest<ChatResponse>("/decisions/chat", {
     method: "POST",
     body: JSON.stringify({ messages }),
   });
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>("/auth/me", undefined, { auth: true });
+}
+
+export async function updateCurrentUser(
+  payload: UpdateCurrentUserPayload,
+): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>(
+    "/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    { auth: true },
+  );
 }

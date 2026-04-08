@@ -1,6 +1,7 @@
 import type { ExploreSuggestion } from "@/lib/api";
 
 const RECENT_EXPLORES_KEY = "truenorth:recent-explores";
+const MAX_RECENT_EXPLORES = 24;
 
 export type StoredExplore = ExploreSuggestion & {
   savedAt: string;
@@ -14,6 +15,17 @@ function normalizeOptional(value: string | null | undefined) {
     return null;
   }
   return trimmed;
+}
+
+function getExploreKey(
+  explore: Pick<StoredExplore, "name" | "url" | "location" | "categorySlug">,
+) {
+  return [
+    explore.name.trim().toLowerCase(),
+    normalizeOptional(explore.url)?.toLowerCase() ?? "",
+    normalizeOptional(explore.location)?.toLowerCase() ?? "",
+    explore.categorySlug ?? "",
+  ].join("|");
 }
 
 export function saveRecentExplores(
@@ -35,7 +47,21 @@ export function saveRecentExplores(
     categorySlug: meta.categorySlug,
   }));
 
-  window.localStorage.setItem(RECENT_EXPLORES_KEY, JSON.stringify(normalized));
+  const existing = readRecentExplores();
+  const merged = [...normalized, ...existing];
+  const unique = new Map<string, StoredExplore>();
+
+  for (const item of merged) {
+    const key = getExploreKey(item);
+    if (!unique.has(key)) {
+      unique.set(key, item);
+    }
+  }
+
+  window.localStorage.setItem(
+    RECENT_EXPLORES_KEY,
+    JSON.stringify(Array.from(unique.values()).slice(0, MAX_RECENT_EXPLORES)),
+  );
 }
 
 export function readRecentExplores(): StoredExplore[] {

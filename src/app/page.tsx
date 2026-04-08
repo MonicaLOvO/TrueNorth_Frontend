@@ -1,13 +1,12 @@
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import TrueNorthLogo from "@/components/TrueNorthLogo";
 
 export default function WelcomePage() {
   return (
     <AppShell>
       <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
-        <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-sky-600 text-4xl text-white shadow-md">
-          🧭
-        </div>
+        <TrueNorthLogo size={108} showText={false} priority className="mb-6" />
 
         <h1 className="text-4xl font-bold tracking-tight">TrueNorth</h1>
         <p className="mt-3 max-w-sm text-slate-600 dark:text-slate-400">
