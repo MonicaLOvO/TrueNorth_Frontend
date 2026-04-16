@@ -1,22 +1,18 @@
+import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import BottomNav from "@/components/BottomNav";
 import CategoryCard from "@/components/CategoryCard";
 import TrueNorthLogo from "@/components/TrueNorthLogo";
 import { CATEGORIES } from "@/lib/categories";
-import Link from "next/link";
 
 export default function HomePage() {
   return (
     <AppShell>
-      <div className="flex items-center justify-between">
-        <TrueNorthLogo />
-        <Link
-          href="/profile"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm transition hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
-          aria-label="Profile"
-        >
-          👤
-        </Link>
+      <div className="flex items-center justify-between gap-3">
+        <TrueNorthLogo size={42} priority />
+        <div className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+          Home
+        </div>
       </div>
 
       <p className="mt-3 text-slate-500 dark:text-slate-400">
@@ -33,7 +29,7 @@ export default function HomePage() {
         <div>
           <div className="text-base font-semibold">Ask anything</div>
           <div className="text-sm text-white/75">
-            Open the live AI chat and send your decision to the backend
+            Open the live AI chat and get personalized suggestions
           </div>
         </div>
       </Link>

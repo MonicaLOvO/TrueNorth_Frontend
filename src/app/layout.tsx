@@ -5,6 +5,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TrueNorth",
   description: "Your AI compass for everyday decisions",
+  icons: {
+    icon: "/truenorth-compass.png",
+    shortcut: "/truenorth-compass.png",
+    apple: "/truenorth-compass.png",
+  },
 };
 
 export default function RootLayout({

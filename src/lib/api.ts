@@ -10,6 +10,12 @@ export type ApiCategory = {
   description: string | null;
 };
 
+export type CreateCategoryPayload = {
+  name: string;
+  iconUrl?: string | null;
+  description?: string | null;
+};
+
 export type ApiChat = {
   Id: string;
   UserId?: string | null;
@@ -56,7 +62,74 @@ export type ChatResponse = {
   explores: ExploreSuggestion[];
 };
 
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export type CurrentUser = {
+  Id: string;
+  UserName: string;
+  Email?: string | null;
+  DisplayName?: string | null;
+};
+
+export type UpdateCurrentUserPayload = {
+  userName?: string;
+  email?: string | null;
+  displayName?: string | null;
+};
+
+let categoriesPromise: Promise<ApiCategory[]> | null = null;
+
+function getStoredAccessToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const directKeys = [
+    "truenorth:access_token",
+    "access_token",
+    "token",
+    "authToken",
+    "jwt",
+  ];
+
+  for (const key of directKeys) {
+    const value =
+      window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    if (value?.trim()) {
+      return value.trim();
+    }
+  }
+
+  const jsonKeys = ["truenorth:auth", "auth", "user", "session"];
+  for (const key of jsonKeys) {
+    const raw =
+      window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        access_token?: string;
+        accessToken?: string;
+        token?: string;
+      };
+
+      const token = parsed.access_token ?? parsed.accessToken ?? parsed.token;
+      if (token?.trim()) {
+        return token.trim();
+      }
+    } catch {
+      // ignore invalid JSON blobs
+    }
+  }
+
+  return null;
+}
+
+async function apiRequest<T>(
+  path: string,
+  init?: RequestInit,
+  options?: { auth?: boolean },
+): Promise<T> {
   let response: Response;
 
   try {
@@ -64,6 +137,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(options?.auth && getStoredAccessToken()
+          ? { Authorization: `Bearer ${getStoredAccessToken()}` }
+          : {}),
         ...(init?.headers ?? {}),
       },
       cache: "no-store",
@@ -109,31 +185,73 @@ function fallbackCategoryName(slug: string) {
     .join(" ");
 }
 
+export async function createCategory(
+  payload: CreateCategoryPayload,
+): Promise<ApiCategory> {
+  const created = await apiRequest<ApiCategory>("/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  categoriesPromise = null;
+  return created;
+}
+
+export async function getCategories(forceRefresh = false): Promise<ApiCategory[]> {
+  if (!categoriesPromise || forceRefresh) {
+    categoriesPromise = apiRequest<ApiCategory[]>("/categories");
+  }
+
+  try {
+    return await categoriesPromise;
+  } catch (error) {
+    categoriesPromise = null;
+    throw error;
+  }
+}
+
 export async function ensureCategory(slug: string): Promise<ApiCategory> {
   const definition = getCategoryDefinition(slug);
   const desiredName = definition?.title ?? fallbackCategoryName(slug);
+  const normalizedDesiredName = normalizeCategoryName(desiredName);
+  const normalizedSlug = normalizeCategoryName(slug);
 
-  const categories = await apiRequest<ApiCategory[]>("/categories");
+  const categories = await getCategories();
+
   const existing = categories.find((category) => {
     const normalized = normalizeCategoryName(category.name);
-    return (
-      normalized === normalizeCategoryName(desiredName) ||
-      normalized === normalizeCategoryName(slug)
-    );
+    return normalized === normalizedDesiredName || normalized === normalizedSlug;
   });
 
   if (existing) {
     return existing;
   }
 
-  return apiRequest<ApiCategory>("/categories", {
-    method: "POST",
-    body: JSON.stringify({
+  try {
+    const created = await createCategory({
       name: desiredName,
-      description: definition?.subtitle ?? `Decisions about ${desiredName}`,
+      description: definition?.subtitle ?? null,
       iconUrl: null,
-    }),
-  });
+    });
+
+    return created;
+  } catch (creationError) {
+    const refreshedCategories = await getCategories(true);
+    const retryMatch = refreshedCategories.find((category) => {
+      const normalized = normalizeCategoryName(category.name);
+      return normalized === normalizedDesiredName || normalized === normalizedSlug;
+    });
+
+    if (retryMatch) {
+      return retryMatch;
+    }
+
+    if (creationError instanceof Error) {
+      throw new Error(`Unable to prepare the ${desiredName} category. ${creationError.message}`);
+    }
+
+    throw new Error(`Unable to prepare the ${desiredName} category.`);
+  }
 }
 
 export async function createChat(categoryId: string): Promise<ApiChat> {
@@ -192,13 +310,12 @@ export async function finalizeGuided(
   });
 }
 
-export async function sendChat(
-  messages: ChatRequestMessage[],
-): Promise<ChatResponse> {
+export async function sendChat(messages: ChatRequestMessage[]): Promise<ChatResponse> {
   return apiRequest<ChatResponse>("/decisions/chat", {
     method: "POST",
     body: JSON.stringify({ messages }),
   });
+<<<<<<< HEAD
 
   // ── Auth ────────────────────────────────────────────────────────────────────
 
@@ -248,4 +365,23 @@ export function logout(): void {
 
 export function isLoggedIn(): boolean {
   return Boolean(getStoredAccessToken());
+=======
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>("/auth/me", undefined, { auth: true });
+}
+
+export async function updateCurrentUser(
+  payload: UpdateCurrentUserPayload,
+): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>(
+    "/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    { auth: true },
+  );
+>>>>>>> 419318d21465bb7c411e40c91f2598a24a49de9c
 }

@@ -12,6 +12,7 @@ import {
   skipGuided,
   startGuided,
 } from "@/lib/api";
+import { CATEGORIES } from "@/lib/categories";
 import { saveRecentExplores } from "@/lib/recent-explores";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -44,6 +45,18 @@ function normalizeUrl(url: string | null) {
     : `https://${url}`;
 }
 
+function cleanText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/^[\s>*•-]+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function getGuidedDisplayMessage(response: {
   question?: GuidedQuestion;
   explores?: ExploreSuggestion[];
@@ -62,6 +75,7 @@ function getGuidedDisplayMessage(response: {
 export default function GuidedPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "food";
+  const category = CATEGORIES.find((item) => item.slug === slug);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatId, setChatId] = useState<string | null>(null);
@@ -90,8 +104,8 @@ export default function GuidedPage() {
       setResults([]);
 
       try {
-        const category = await ensureCategory(slug);
-        const chat = await createChat(category.id);
+        const existingCategory = await ensureCategory(slug);
+        const chat = await createChat(existingCategory.id);
         const response = await startGuided(chat.Id);
 
         if (cancelled) {
@@ -305,25 +319,14 @@ export default function GuidedPage() {
 
   return (
     <AppShell>
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <BackButton href="/home" />
 
-        <div className="flex items-center gap-3">
-          {currentQuestion ? (
-            <button
-              onClick={() => void handleSkip()}
-              disabled={submitting}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-            >
-              Skip
-            </button>
-          ) : null}
-          <Link
-            href={`/category/${slug}/chat`}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-          >
-            Chat
-          </Link>
+        <div className="text-right">
+          <div className="text-sm font-semibold text-sky-600 dark:text-sky-400">Guided mode</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            {category ? `${category.emoji} ${category.title}` : "TrueNorth"}
+          </div>
         </div>
       </div>
 
@@ -345,12 +348,21 @@ export default function GuidedPage() {
             <div>
               {Math.min(answeredCount + 1, MAX_GUIDED_QUESTIONS)} of {MAX_GUIDED_QUESTIONS}
             </div>
-            <button
-              onClick={() => setRefreshKey((value) => value + 1)}
-              className="font-medium text-sky-600 hover:underline"
-            >
-              Restart
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => void handleSkip()}
+                disabled={submitting}
+                className="font-medium text-slate-500 hover:text-slate-700 disabled:opacity-60 dark:hover:text-slate-200"
+              >
+                Skip
+              </button>
+              <button
+                onClick={() => setRefreshKey((value) => value + 1)}
+                className="font-medium text-sky-600 hover:underline"
+              >
+                Restart
+              </button>
+            </div>
           </div>
 
           <div className="mt-3 h-2 w-full rounded-full bg-slate-200/60 dark:bg-slate-800">
@@ -451,15 +463,17 @@ export default function GuidedPage() {
 
               return (
                 <div
-                  key={result.name}
+                  key={`${result.name}-${result.url ?? result.location ?? "result"}`}
                   className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-lg font-semibold">{result.name}</div>
-                      {result.location ? (
+                      <div className="text-lg font-semibold">
+                        {cleanText(result.name) ?? result.name}
+                      </div>
+                      {cleanText(result.location) ? (
                         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                          {result.location}
+                          {cleanText(result.location)}
                         </div>
                       ) : null}
                     </div>
@@ -468,9 +482,9 @@ export default function GuidedPage() {
                     </span>
                   </div>
 
-                  {result.description ? (
+                  {cleanText(result.description) ? (
                     <div className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-                      {result.description}
+                      {cleanText(result.description)}
                     </div>
                   ) : null}
 
@@ -485,34 +499,39 @@ export default function GuidedPage() {
                         Open website
                       </a>
                     ) : null}
+                    <Link
+                      href="/explore"
+                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
+                    >
+                      View in Explore
+                    </Link>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          <div className="mt-6 grid gap-3">
-            <Link
-              href="/explore"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-            >
-              Open Explore Screen
-            </Link>
-            <Link
-              href={`/category/${slug}/chat`}
-              className="w-full rounded-2xl bg-sky-600 px-5 py-4 text-center font-semibold text-white shadow hover:bg-sky-700"
-            >
-              Continue in Chat
-            </Link>
-            <button
-              onClick={() => setRefreshKey((value) => value + 1)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-            >
-              Start Over
-            </button>
-          </div>
         </div>
       ) : null}
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Want a different mode?
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Link
+            href={`/category/${slug}/chat`}
+            className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
+          >
+            Open Chat
+          </Link>
+          <Link
+            href={`/category/${slug}/voice`}
+            className="rounded-2xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
+          >
+            Open Voice
+          </Link>
+        </div>
+      </div>
     </AppShell>
   );
 }

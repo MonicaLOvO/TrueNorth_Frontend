@@ -1,11 +1,10 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
+import BackButton from "@/components/BackButton";
 import { API_BASE_URL } from "@/lib/api";
-import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import BackButton from "@/components/BackButton";
 
 export default function SettingsPage() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -21,7 +20,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <BackButton href="/home" />
+      <BackButton useHistory fallbackHref="/profile" />
 
       <h1 className="mt-4 text-2xl font-bold">Settings</h1>
 
@@ -38,7 +37,7 @@ export default function SettingsPage() {
               onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
               className="rounded-xl bg-sky-600 px-4 py-2 font-semibold text-white hover:bg-sky-700"
             >
-              {activeTheme === "dark" ? "Dark" : "Light"}
+              Switch to {activeTheme === "dark" ? "Light" : "Dark"}
             </button>
           </div>
         </div>
@@ -52,7 +51,9 @@ export default function SettingsPage() {
             {API_BASE_URL}
           </code>
           <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            Local development defaults to /api, which proxies to the backend on http://localhost:3000. Change BACKEND_API_BASE_URL or NEXT_PUBLIC_API_BASE_URL if your backend runs somewhere else.
+            Local development defaults to /api, which proxies to the backend on
+            http://localhost:3000. Change BACKEND_API_BASE_URL or
+            NEXT_PUBLIC_API_BASE_URL if your backend runs somewhere else.
           </div>
         </div>
       </div>

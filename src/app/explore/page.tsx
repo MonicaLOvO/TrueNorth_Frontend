@@ -3,6 +3,7 @@
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
 import { readRecentExplores, type StoredExplore } from "@/lib/recent-explores";
+import { CATEGORIES } from "@/lib/categories";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -12,7 +13,8 @@ type Filter = (typeof FILTERS)[number];
 const FALLBACK_EXPLORES: StoredExplore[] = [
   {
     name: "TrueNorth demo result",
-    description: "Finish a guided flow or use chat suggestions to populate this screen with live recommendations.",
+    description:
+      "Finish a guided flow or use chat suggestions to populate this screen with live recommendations.",
     url: null,
     location: "No recent backend result yet",
     imageUrl: null,
@@ -33,6 +35,26 @@ function normalizeUrl(url: string | null) {
   return url.startsWith("http://") || url.startsWith("https://")
     ? url
     : `https://${url}`;
+}
+
+function cleanText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/^[\s>*•-]+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function getCategoryLabel(slug?: string) {
+  if (!slug) {
+    return null;
+  }
+
+  return CATEGORIES.find((category) => category.slug === slug)?.title ?? slug;
 }
 
 export default function ExplorePage() {
@@ -63,10 +85,11 @@ export default function ExplorePage() {
     filtered.find((explore) => explore.name === selectedName) ?? filtered[0] ?? null;
 
   const websiteUrl = normalizeUrl(selectedExplore?.url ?? null);
+  const categoryLabel = getCategoryLabel(selectedExplore?.categorySlug);
 
   return (
     <AppShell>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <BackButton href="/home" />
         <div className="text-lg font-semibold text-slate-900 dark:text-white">Explore</div>
         <button
@@ -90,9 +113,9 @@ export default function ExplorePage() {
             <div className="mt-2 text-slate-600 dark:text-slate-400">
               {filtered.length} result{filtered.length === 1 ? "" : "s"} available
             </div>
-            {selectedExplore?.categorySlug ? (
+            {categoryLabel ? (
               <div className="mt-1 text-slate-500 dark:text-slate-400">
-                Category: {selectedExplore.categorySlug}
+                Category: {categoryLabel}
               </div>
             ) : null}
           </div>
@@ -134,10 +157,12 @@ export default function ExplorePage() {
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-lg font-semibold">{selectedExplore.name}</div>
-              {selectedExplore.location ? (
+              <div className="text-lg font-semibold">
+                {cleanText(selectedExplore.name) ?? selectedExplore.name}
+              </div>
+              {cleanText(selectedExplore.location) ? (
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {selectedExplore.location}
+                  {cleanText(selectedExplore.location)}
                 </div>
               ) : null}
             </div>
@@ -146,9 +171,9 @@ export default function ExplorePage() {
             </span>
           </div>
 
-          {selectedExplore.description ? (
-            <div className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-              {selectedExplore.description}
+          {cleanText(selectedExplore.description) ? (
+            <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              {cleanText(selectedExplore.description)}
             </div>
           ) : null}
 
@@ -156,47 +181,89 @@ export default function ExplorePage() {
             Saved {formatSavedAt(selectedExplore.savedAt)}
           </div>
 
-          {websiteUrl ? (
-            <a
-              href={websiteUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-            >
-              Open website
-            </a>
-          ) : null}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {websiteUrl ? (
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              >
+                Open website
+              </a>
+            ) : null}
+            {selectedExplore.categorySlug ? (
+              <Link
+                href={`/category/${selectedExplore.categorySlug}/guided`}
+                className="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
+              >
+                Open {getCategoryLabel(selectedExplore.categorySlug)}
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
       <div className="mt-4 space-y-4 pb-10">
-        {filtered.map((explore) => (
-          <button
-            key={`${explore.name}-${explore.savedAt}`}
-            className={[
-              "w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md dark:bg-slate-900",
-              selectedExplore?.name === explore.name
-                ? "border-sky-400 ring-2 ring-sky-400/40 dark:border-sky-500"
-                : "border-slate-200 dark:border-slate-800",
-            ].join(" ")}
-            onClick={() => setSelectedName(explore.name)}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold">{explore.name}</div>
-                <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {explore.location ?? "No location provided"}
+        {filtered.map((explore) => {
+          const itemUrl = normalizeUrl(explore.url);
+          const isActive = selectedExplore?.name === explore.name;
+          return (
+            <div
+              key={`${explore.name}-${explore.savedAt}`}
+              className={[
+                "rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:shadow-md dark:bg-slate-900",
+                isActive
+                  ? "border-sky-400 ring-2 ring-sky-400/40 dark:border-sky-500"
+                  : "border-slate-200 dark:border-slate-800",
+              ].join(" ")}
+            >
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => setSelectedName(explore.name)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">
+                      {cleanText(explore.name) ?? explore.name}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {cleanText(explore.location) ?? "No location provided"}
+                    </div>
+                  </div>
+                  <div className="text-slate-400">›</div>
                 </div>
+                {cleanText(explore.description) ? (
+                  <div className="mt-3 line-clamp-3 text-sm text-slate-600 dark:text-slate-400">
+                    {cleanText(explore.description)}
+                  </div>
+                ) : null}
+              </button>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                {itemUrl ? (
+                  <a
+                    href={itemUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                  >
+                    Website
+                  </a>
+                ) : null}
+                {explore.categorySlug ? (
+                  <Link
+                    href={`/category/${explore.categorySlug}/guided`}
+                    className="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-200"
+                  >
+                    Open category
+                  </Link>
+                ) : null}
               </div>
-              <div className="text-slate-400">›</div>
             </div>
-            {explore.description ? (
-              <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-                {explore.description}
-              </div>
-            ) : null}
-          </button>
-        ))}
+          );
+        })}
       </div>
     </AppShell>
   );

@@ -4,6 +4,7 @@ const backendApiBaseUrl =
   process.env.BACKEND_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:3000";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false,
   async rewrites() {
     return [
       {
