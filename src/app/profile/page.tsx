@@ -2,7 +2,8 @@
 
 import AppShell from "@/components/AppShell";
 import BackButton from "@/components/BackButton";
-import { getCurrentUser, updateCurrentUser, type CurrentUser } from "@/lib/api";
+import { updateCurrentUser, type CurrentUser } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { readRecentExplores } from "@/lib/recent-explores";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -60,56 +61,39 @@ function getInitials(user: Pick<CurrentUser, "DisplayName" | "UserName">) {
   );
 }
 
+const DEMO_USER: CurrentUser = {
+  Id: "demo-user",
+  UserName: "TrueNorth User",
+  Email: "demo@truenorth.app",
+  DisplayName: "TrueNorth User",
+};
+
 export default function ProfilePage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
+  const { user: authUser, isAuthenticated, logout: authLogout, authState } = useAuth();
   const [mounted, setMounted] = useState(false);
-  const [loadingUser, setLoadingUser] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [savingTheme, setSavingTheme] = useState(false);
   const [recentExplores, setRecentExplores] = useState(
     () => [] as ReturnType<typeof readRecentExplores>,
   );
-  const [user, setUser] = useState<CurrentUser>({
-    Id: "demo-user",
-    UserName: "TrueNorth User",
-    Email: "demo@truenorth.app",
-    DisplayName: "TrueNorth User",
-  });
+  const [user, setUser] = useState<CurrentUser>(DEMO_USER);
+
+  const loadingUser = authState.status === "loading";
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadCurrentUser() {
-      setLoadingUser(true);
+    if (authUser) {
+      setUser(authUser);
       setProfileError(null);
-
-      try {
-        const profile = await getCurrentUser();
-        if (active) {
-          setUser(profile);
-        }
-      } catch {
-        if (active) {
-          setProfileError("Using demo profile data because no signed-in user was found.");
-        }
-      } finally {
-        if (active) {
-          setLoadingUser(false);
-        }
-      }
+    } else if (authState.status === "unauthenticated") {
+      setProfileError("Using demo profile — sign in to see your real profile.");
     }
-
-    void loadCurrentUser();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [authUser, authState.status]);
 
   useEffect(() => {
     setRecentExplores(readRecentExplores());
@@ -128,24 +112,20 @@ export default function ProfilePage() {
   );
 
   async function handleThemeToggle() {
-    if (!mounted || savingTheme) {
-      return;
-    }
-
+    if (!mounted || savingTheme) return;
     setSavingTheme(true);
     setTheme(darkMode ? "light" : "dark");
     setTimeout(() => setSavingTheme(false), 150);
   }
 
-  async function handleUseDemoProfile() {
+  function handleUseDemoProfile() {
     setProfileError(null);
-    setLoadingUser(false);
-    setUser({
-      Id: "demo-user",
-      UserName: "TrueNorth User",
-      Email: "demo@truenorth.app",
-      DisplayName: "TrueNorth User",
-    });
+    setUser(DEMO_USER);
+  }
+
+  function handleLogout() {
+    authLogout();
+    router.push("/login");
   }
 
   async function handleQuickDisplayNameUpdate() {
@@ -154,9 +134,7 @@ export default function ProfilePage() {
       user.DisplayName?.trim() || user.UserName?.trim() || "",
     );
 
-    if (nextName === null) {
-      return;
-    }
+    if (nextName === null) return;
 
     const trimmed = nextName.trim();
     if (!trimmed) {
@@ -258,19 +236,38 @@ export default function ProfilePage() {
         </div>
 
         <div className="mt-6 grid gap-3">
+          {!isAuthenticated ? (
+            <Link
+              href="/login"
+              className="w-full rounded-2xl bg-sky-600 px-4 py-4 text-center font-semibold text-white shadow hover:bg-sky-700"
+            >
+              Sign in
+            </Link>
+          ) : null}
           <button
             type="button"
-            onClick={() => void handleUseDemoProfile()}
+            onClick={handleUseDemoProfile}
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
           >
             Use Demo Profile
           </button>
-          <button
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300 bg-red-50 px-4 py-4 font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
-            onClick={() => router.push("/")}
-          >
-            ⎋ Return to Welcome Screen
-          </button>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300 bg-red-50 px-4 py-4 font-semibold text-red-600 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+              onClick={handleLogout}
+            >
+              ⎋ Sign out
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              onClick={() => router.push("/")}
+            >
+              ⎋ Return to Welcome Screen
+            </button>
+          )}
         </div>
       </div>
     </AppShell>
