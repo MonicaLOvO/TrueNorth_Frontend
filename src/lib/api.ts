@@ -199,4 +199,53 @@ export async function sendChat(
     method: "POST",
     body: JSON.stringify({ messages }),
   });
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+
+export type LoginPayload = {
+  userName: string;
+  password: string;
+};
+
+export type RegisterPayload = {
+  userName: string;
+  email: string;
+  password: string;
+  displayName?: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  user: CurrentUser;
+};
+
+export async function login(payload: LoginPayload): Promise<AuthResponse> {
+  const response = await apiRequest<AuthResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (response.access_token) {
+    localStorage.setItem("truenorth:access_token", response.access_token);
+  }
+  return response;
+}
+
+export async function register(payload: RegisterPayload): Promise<AuthResponse> {
+  const response = await apiRequest<AuthResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (response.access_token) {
+    localStorage.setItem("truenorth:access_token", response.access_token);
+  }
+  return response;
+}
+
+export function logout(): void {
+  localStorage.removeItem("truenorth:access_token");
+  sessionStorage.removeItem("truenorth:access_token");
+}
+
+export function isLoggedIn(): boolean {
+  return Boolean(getStoredAccessToken());
 }
