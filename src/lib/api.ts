@@ -75,6 +75,27 @@ export type UpdateCurrentUserPayload = {
   displayName?: string | null;
 };
 
+// ── Auth types ───────────────────────────────────────────────────────────────
+
+export type LoginPayload = {
+  userName: string;
+  password: string;
+};
+
+export type RegisterPayload = {
+  userName: string;
+  email: string;
+  password: string;
+  displayName?: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  user: CurrentUser;
+};
+
+// ── Token helpers ────────────────────────────────────────────────────────────
+
 let categoriesPromise: Promise<ApiCategory[]> | null = null;
 
 function getStoredAccessToken() {
@@ -125,6 +146,8 @@ function getStoredAccessToken() {
   return null;
 }
 
+// ── Core request helper ──────────────────────────────────────────────────────
+
 async function apiRequest<T>(
   path: string,
   init?: RequestInit,
@@ -170,6 +193,8 @@ async function apiRequest<T>(
   return (await response.json()) as T;
 }
 
+// ── Category helpers ─────────────────────────────────────────────────────────
+
 function normalizeCategoryName(value: string) {
   return value.trim().toLowerCase();
 }
@@ -184,6 +209,8 @@ function fallbackCategoryName(slug: string) {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+// ── Category API ─────────────────────────────────────────────────────────────
 
 export async function createCategory(
   payload: CreateCategoryPayload,
@@ -254,6 +281,8 @@ export async function ensureCategory(slug: string): Promise<ApiCategory> {
   }
 }
 
+// ── Chat & decisions API ─────────────────────────────────────────────────────
+
 export async function createChat(categoryId: string): Promise<ApiChat> {
   return apiRequest<ApiChat>("/chats", {
     method: "POST",
@@ -315,26 +344,28 @@ export async function sendChat(messages: ChatRequestMessage[]): Promise<ChatResp
     method: "POST",
     body: JSON.stringify({ messages }),
   });
-<<<<<<< HEAD
+}
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
+// ── User API ─────────────────────────────────────────────────────────────────
 
-export type LoginPayload = {
-  userName: string;
-  password: string;
-};
+export async function getCurrentUser(): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>("/auth/me", undefined, { auth: true });
+}
 
-export type RegisterPayload = {
-  userName: string;
-  email: string;
-  password: string;
-  displayName?: string;
-};
+export async function updateCurrentUser(
+  payload: UpdateCurrentUserPayload,
+): Promise<CurrentUser> {
+  return apiRequest<CurrentUser>(
+    "/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    { auth: true },
+  );
+}
 
-export type AuthResponse = {
-  access_token: string;
-  user: CurrentUser;
-};
+// ── Auth API ─────────────────────────────────────────────────────────────────
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
   const response = await apiRequest<AuthResponse>("/auth/login", {
@@ -365,23 +396,4 @@ export function logout(): void {
 
 export function isLoggedIn(): boolean {
   return Boolean(getStoredAccessToken());
-=======
-}
-
-export async function getCurrentUser(): Promise<CurrentUser> {
-  return apiRequest<CurrentUser>("/auth/me", undefined, { auth: true });
-}
-
-export async function updateCurrentUser(
-  payload: UpdateCurrentUserPayload,
-): Promise<CurrentUser> {
-  return apiRequest<CurrentUser>(
-    "/auth/me",
-    {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    },
-    { auth: true },
-  );
->>>>>>> 419318d21465bb7c411e40c91f2598a24a49de9c
 }
