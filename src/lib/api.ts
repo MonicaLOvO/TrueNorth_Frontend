@@ -62,6 +62,10 @@ export type ChatResponse = {
   explores: ExploreSuggestion[];
 };
 
+export type VoiceChatResponse = ChatResponse & {
+  transcript: string;
+};
+
 export type CurrentUser = {
   Id: string;
   UserName: string;
@@ -155,14 +159,23 @@ async function apiRequest<T>(
 ): Promise<T> {
   let response: Response;
 
+  const body = init?.body;
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (options?.auth && getStoredAccessToken()) {
+    headers.Authorization = `Bearer ${getStoredAccessToken()}`;
+  }
+
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
-        ...(options?.auth && getStoredAccessToken()
-          ? { Authorization: `Bearer ${getStoredAccessToken()}` }
-          : {}),
+        ...headers,
         ...(init?.headers ?? {}),
       },
       cache: "no-store",
@@ -343,6 +356,25 @@ export async function sendChat(messages: ChatRequestMessage[]): Promise<ChatResp
   return apiRequest<ChatResponse>("/decisions/chat", {
     method: "POST",
     body: JSON.stringify({ messages }),
+  });
+}
+
+/**
+ * Voice / audio chat: multipart field `audio` plus optional `messages` JSON string (prior turns).
+ */
+export async function sendChatAudio(params: {
+  audio: Blob;
+  filename?: string;
+  messages?: ChatRequestMessage[];
+}): Promise<VoiceChatResponse> {
+  const form = new FormData();
+  form.append("audio", params.audio, params.filename ?? "recording.webm");
+  if (params.messages?.length) {
+    form.append("messages", JSON.stringify(params.messages));
+  }
+  return apiRequest<VoiceChatResponse>("/decisions/chat/audio", {
+    method: "POST",
+    body: form,
   });
 }
 

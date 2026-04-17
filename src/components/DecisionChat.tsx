@@ -388,7 +388,7 @@ export default function DecisionChat({ slug }: { slug?: string }) {
 
       ) : null}
  
-      <div className="sticky bottom-20 mt-5 flex items-center gap-2">
+      <div className="mt-5 mb-24 flex items-center gap-2">
 <div className="flex flex-1 items-center rounded-full border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
 <input
 
