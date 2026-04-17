@@ -62,6 +62,12 @@ export type ChatResponse = {
   explores: ExploreSuggestion[];
 };
 
+export type AudioChatResponse = {
+  transcript: string;
+  message: string;
+  explores: ExploreSuggestion[];
+};
+
 export type CurrentUser = {
   Id: string;
   UserName: string;
@@ -344,6 +350,50 @@ export async function sendChat(messages: ChatRequestMessage[]): Promise<ChatResp
     method: "POST",
     body: JSON.stringify({ messages }),
   });
+}
+
+export async function sendAudioChat(
+  audioFile: File,
+  messages?: ChatRequestMessage[],
+): Promise<AudioChatResponse> {
+  const formData = new FormData();
+  formData.append("audio", audioFile);
+
+  if (messages && messages.length > 0) {
+    formData.append("messages", JSON.stringify(messages));
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/decisions/chat/audio`, {
+      method: "POST",
+      body: formData,
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(
+      `Could not reach the TrueNorth backend through ${API_BASE_URL}. Start the backend, or set NEXT_PUBLIC_API_BASE_URL / BACKEND_API_BASE_URL correctly.`,
+    );
+  }
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+
+    try {
+      const payload = (await response.json()) as { message?: string | string[] };
+      if (Array.isArray(payload.message)) {
+        message = payload.message.join(", ");
+      } else if (payload.message) {
+        message = payload.message;
+      }
+    } catch {
+      // ignore JSON parse failures and keep the fallback message
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as AudioChatResponse;
 }
 
 // ── User API ─────────────────────────────────────────────────────────────────
